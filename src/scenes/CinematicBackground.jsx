@@ -1,57 +1,60 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useThree } from '@react-three/fiber';
 import { useTexture } from '@react-three/drei';
-import * as THREE from 'three';
 import { useStore } from '../store/useStore';
 
-// ชุดรูปถ่ายจริง (เลือก ID ที่มั่นคงที่สุด และไม่ใช้ query parameter ที่ซับซ้อน)
-const BACKGROUNDS = [
-  '/assets/image/image1.avif',
-  '/assets/image/image2.avif',
-  '/assets/image/image3.avif',
-  '/assets/image/image4.jpg',
-  '/assets/image/image5.jpg',
-  '/assets/image/image6.jpg',
-];
+// ✅ import asset ให้ Vite จัดการ
+import img1 from '@/assets/image/image1.jpg';
+import img2 from '@/assets/image/image2.jpg';
+import img3 from '@/assets/image/image3.jpg';
+import img4 from '@/assets/image/image4.jpg';
+import img5 from '@/assets/image/image5.jpg';
+import img6 from '@/assets/image/image6.jpg';
+
+const BACKGROUNDS = [img1, img2, img3, img4, img5, img6];
+
+// preload ป้องกันกระตุก + context lost
+useTexture.preload(BACKGROUNDS);
 
 export default function CinematicBackground() {
-  const { size, camera } = useThree();
+  const { size } = useThree();
   const { currentStep } = useStore();
 
-  // โหลด Texture ทั้งหมดมาก่อน
   const textures = useTexture(BACKGROUNDS);
+
+  // 🛡 guard สำคัญมาก
+  if (!textures || textures.some(t => !t)) return null;
 
   const opacity = useRef(1);
   const prevTextureRef = useRef(null);
-  const transitionRef = useRef(null);
+  const transitioning = useRef(false);
 
-  // คำนวณ Scale ให้รูปเต็มจอแบบ Object-Fit Cover
   const aspect = size.width / size.height;
-  const scale = 1.0;
 
-  // Logic Cross-Fade
   useEffect(() => {
-    if (transitionRef.current) return;
+    if (transitioning.current) return;
 
-    prevTextureRef.current = textures[currentStep - 1] || textures[currentStep];
+    prevTextureRef.current =
+      textures[currentStep - 1] ?? textures[currentStep];
+
     opacity.current = 0;
+    transitioning.current = true;
 
-    // อนิเมชัน Fade
-    transitionRef.current = true;
-    let frame;
-    const animateTransition = () => {
+    let raf;
+    const animate = () => {
       opacity.current += 0.02;
 
       if (opacity.current >= 1) {
         opacity.current = 1;
         prevTextureRef.current = null;
-        transitionRef.current = false;
-        cancelAnimationFrame(frame);
+        transitioning.current = false;
+        cancelAnimationFrame(raf);
       } else {
-        frame = requestAnimationFrame(animateTransition);
+        raf = requestAnimationFrame(animate);
       }
     };
-    animateTransition();
+
+    animate();
   }, [currentStep, textures]);
 
   const currentTexture = textures[currentStep];
@@ -59,7 +62,7 @@ export default function CinematicBackground() {
 
   return (
     <group>
-      {/* --- Mesh รูปเก่า (จางหายไป) --- */}
+      {/* Previous background */}
       {prevTexture && (
         <mesh position={[0, 0, -10]}>
           <planeGeometry args={[20 * aspect, 20]} />
@@ -72,7 +75,7 @@ export default function CinematicBackground() {
         </mesh>
       )}
 
-      {/* --- Mesh รูปใหม่ (ค่อยๆ ชัดขึ้น) --- */}
+      {/* Current background */}
       {currentTexture && (
         <mesh position={[0, 0, -10]}>
           <planeGeometry args={[20 * aspect, 20]} />
